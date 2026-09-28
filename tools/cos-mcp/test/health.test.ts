@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classify } from '../src/health.js';
+import { classify, restartedSinceLastLine } from '../src/health.js';
 import { analyzeLog, parseLog } from '../src/log.js';
 import { emptyState, hello, logText, mainProcess } from './helpers.js';
 
@@ -81,6 +81,12 @@ describe('classify', () => {
     const much_later = '2026-09-28T03:00:00Z';
     expect(classify({ nowMs: at(soon), processes: [], hello: null, facts: facts(lines, soon), state: emptyState() }).state).toBe('updating');
     expect(classify({ nowMs: at(much_later), processes: [], hello: null, facts: facts(lines, much_later), state: emptyState() }).state).toBe('down');
+  });
+
+  it('attributes a missing app to a machine restart only when the boot came after the last line', () => {
+    expect(restartedSinceLastLine(at('2026-09-28T20:00:00Z'), '2026-09-28T18:59:51.143Z')).toBe(true);
+    expect(restartedSinceLastLine(at('2026-09-28T08:00:00Z'), '2026-09-28T18:59:51.143Z')).toBe(false);
+    expect(restartedSinceLastLine(at('2026-09-28T20:00:00Z'), null)).toBe(false);
   });
 
   it('flags a tunnel only after it has been offline for a while', () => {

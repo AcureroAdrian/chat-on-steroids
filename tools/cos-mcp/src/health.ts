@@ -1,3 +1,4 @@
+import os from 'node:os';
 import { probeResponsive, type HelloReply } from './bridge.js';
 import type { CosEnv } from './env.js';
 import { analyzeLog, readLog, type LogFacts } from './log.js';
@@ -178,6 +179,14 @@ export function classify(input: ClassifyInput): { state: HealthState; issues: Is
   return { state: 'startup_hung', issues, main };
 }
 
+/**
+ * A machine restart ends the app without its shutdown sequence, exactly like a crash. When the
+ * machine booted after the app's last log line, the restart is the likely cause.
+ */
+export function restartedSinceLastLine(bootMs: number, lastEntryAt: string | null): boolean {
+  return lastEntryAt !== null && bootMs > Date.parse(lastEntryAt);
+}
+
 function summaryFor(state: HealthState, main: CosProcess | null, hello: HelloReply | null, since: string | null): string {
   switch (state) {
     case 'healthy':
@@ -227,10 +236,14 @@ export async function gatherHealth(env: CosEnv, store: Store, nowMs = Date.now()
   const suggestion = SUGGESTIONS[verdict.state];
   const helpers = processes ? processes.filter((item) => !item.main).length : 0;
   const m = verdict.main;
+  let summary = summaryFor(verdict.state, m, hello, notRespondingSince);
+  if (verdict.state === 'down' && restartedSinceLastLine(nowMs - os.uptime() * 1000, facts.lastEntryAt)) {
+    summary += " The computer restarted after the app's last log line, so the restart most likely ended it, not a crash.";
+  }
   return {
     state: verdict.state,
     checkedAt: now,
-    summary: summaryFor(verdict.state, m, hello, notRespondingSince),
+    summary,
     suggestedAction: suggestion.action,
     suggestion: suggestion.text,
     process: m
